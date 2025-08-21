@@ -1,12 +1,15 @@
 from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
+import random
 
 # Initialize FastMCP server
 mcp = FastMCP("shopping")
 
 
 ## some of this setup is not needed, taken directly from tutorial, ok for now
+## tutorial: https://modelcontextprotocol.io/quickstart/server
+
 
 # Constants
 NWS_API_BASE = "https://api.weather.gov"
@@ -41,7 +44,7 @@ Instructions: {props.get('instruction', 'No specific instructions provided')}
 
 
 
-
+##### TOOLS ###########
 
 @mcp.tool()
 async def search_item(search_phrase: str) -> dict:
@@ -172,6 +175,36 @@ async def search_item(search_phrase: str) -> dict:
     ]
     return {"items": products}
 
+
+
+
+@mcp.tool()
+async def store_offers(cart: list) -> dict:
+    """
+    Searches for available store offers and automatically applies them.
+    In this case, offers $1 off any travel size mascara.
+    Args:
+        cart (list): List of cart items.
+    Returns:
+        dict: Offer details and whether it was applied.
+    """
+    offer = {
+        "description": "$1 off any travel size mascara",
+        "applies": any(
+            item.get("name", "").lower() == "black mascara" and item.get("variant", {}).get("size", "").lower() == "travel"
+            for item in cart
+        ),
+        "discount": 1.00,
+        "applied": False
+    }
+    # Automatically apply the offer if it applies
+    if offer["applies"]:
+        offer["applied"] = True
+    return offer
+
+
+
+
 @mcp.tool()
 async def add_to_cart(item_phrase: str) -> dict:
     """
@@ -193,50 +226,108 @@ async def add_to_cart(item_phrase: str) -> dict:
         },
         "quantity": 1
     }
+    cart = [added_item]
+    offer = await store_offers(cart)
     return {
         "message": f"Added '{added_item['name']}' (Travel size, Black) to cart.",
-        "cart": [added_item],
+        "cart": cart,
+        "offer": offer,
         "image_path": "mascara.png"  # Path to the mascara image
     }
+
+
 
 
 @mcp.tool()
 async def get_delivery_option(shipping_address: dict) -> dict:
     """
-    Takes a shipping address and returns a delivery option for 2025-09-05.
+    Takes only a shipping address and returns available delivery options.
+    This tool does not prompt for payment or card confirmation, and does not proceed to payment steps.
+    The user must first confirm the shipping address and select a shipping option; only then should payment be handled separately.
     Args:
-        shipping_address (dict): Shipping address details.
+        shipping_address (dict): Shipping address details (optional).
     Returns:
-        dict: Delivery option with delivery date.
+        dict: Available delivery options and the provided shipping address.
     """
     return {
-        "delivery_option": "Standard Shipping",
-        "delivery_date": "2025-09-05",
+        "available_options": [
+            {
+                "delivery_option": "Standard Shipping",
+                "delivery_date": "2025-09-05",
+                "cost": 0.0
+            },
+            {
+                "delivery_option": "2-Day Shipping",
+                "delivery_date": "2025-08-25",
+                "cost": 9.99
+            }
+        ],
         "shipping_address": shipping_address
     }
 
 
 @mcp.tool()
-async def process_payment(email: str, customer_name: str, card_info: dict) -> dict:
+async def confirm_card_on_file() -> dict:
+    """
+    Asks the user if they want to use the card on file ending in 1234 for payment.
+    Returns:
+        dict: Confirmation message and user response (mocked as True for demo).
+    """
+    # In a real system, prompt the user. Here, we assume user says yes.
+    return {
+        "message": "Would you like to use the card on file ending in 1234?",
+        "card_last4": "1234",
+        "confirmed": True
+    }
+
+
+
+@mcp.tool()
+async def process_payment(email: str, customer_name: str, shipping_selection: dict) -> dict:
     """
     Processes payment with provided customer and card info.
     Args:
         email (str): Customer's email address.
         customer_name (str): Customer's full name.
-        card_info (dict): Card information (mocked).
+        shipping_selection (dict): Selected shipping option.
     Returns:
-        dict: Payment status and summary.
+        dict: Payment status, order confirmation number, and summary.
     """
-    # Mock payment processing
+    # For demo, assume cart is always a single travel size mascara
+    cart = [{
+        "id": 2,
+        "name": "Black Mascara",
+        "category": "Makeup",
+        "variant": {
+            "size": "Travel",
+            "price": 7.49,
+            "color": {"name": "Black", "hex": "#000000"}
+        },
+        "quantity": 1
+    }]
+
+    offer = await store_offers(cart)
+    subtotal = cart[0]["variant"]["price"] * cart[0]["quantity"]
+    discount = offer["discount"] if offer["applied"] else 0.0
+    total = subtotal - discount
+
+    # Instead of a separate tool, just return a message asking for confirmation
     return {
-        "message": "Payment processed successfully!",
+        "message": "Would you like to use the card on file ending in 1234 for payment?",
+        "card_last4": "1234",
+        "cart": cart,
+        "offer": offer,
+        "subtotal": subtotal,
+        "discount": discount,
+        "total": total,
+        "shipping_selection": shipping_selection,
         "customer": {
             "name": customer_name,
             "email": email
         },
-        "payment_status": "Processed",
-        "card_info": {"last4": str(card_info.get("number", "0000"))[-4:]}
+        "payment_status": "Awaiting confirmation"
     }
+
 
 
 
