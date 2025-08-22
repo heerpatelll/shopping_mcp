@@ -311,9 +311,13 @@ async def process_payment(email: str, customer_name: str, shipping_selection: di
     discount = offer["discount"] if offer["applied"] else 0.0
     total = subtotal - discount
 
+    # Generate a random order number (e.g., 8-digit number) to include in the response
+    order_number = str(random.randint(10000000, 99999999))
+
     # Instead of a separate tool, just return a message asking for confirmation
     return {
         "message": "Would you like to use the card on file ending in 1234 for payment?",
+        "order_number": order_number,
         "card_last4": "1234",
         "cart": cart,
         "offer": offer,
