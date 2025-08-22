@@ -236,6 +236,32 @@ async def add_to_cart(item_phrase: str) -> dict:
     }
 
 
+@mcp.tool()
+async def remove_from_cart(cart: list) -> dict:
+    """
+    Removes travel-size mascara items from the provided cart.
+    Args:
+        cart (list): The current cart (list of item dicts).
+    Returns:
+        dict: Updated cart and a list of removed items.
+    """
+    if not cart:
+        return {"message": "Cart is empty.", "cart": [], "removed": []}
+
+    removed = []
+    updated_cart = []
+    for item in cart:
+        name = item.get("name", "").lower()
+        size = item.get("variant", {}).get("size", "").lower()
+        if "mascara" in name and size == "travel":
+            removed.append(item)
+        else:
+            updated_cart.append(item)
+
+    message = f"Removed {len(removed)} item(s) from cart." if removed else "No matching travel-size mascara found in cart."
+    return {"message": message, "cart": updated_cart, "removed": removed}
+
+
 
 
 @mcp.tool()
